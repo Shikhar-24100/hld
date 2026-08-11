@@ -1,7 +1,7 @@
 import time
 import redis
 
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Response
 
 
 app = FastAPI()
@@ -36,16 +36,23 @@ def check_rate_limit(identifier: str):
 
 
 
-def rate_limiter_dependency(request: Request):
+def rate_limiter_dependency(request: Request, response: Response):
     #for now, identify clients by IP(will rectify later)
     client_ip = request.client.host
-
     allowed, remaining = check_rate_limit(client_ip)
 
+
+    #always tell the client how many tokens are left
+    response.headers["X-RateLimit-Remaining"] = str(int(remaining))
+    response.headers["X-RateLimit-Limit"] = str(CAPACITY)
+
+
     if not allowed:
+        retry_after = round(1/REFILL_RATE, 2);
         raise HTTPException(
             status_code = 429,
-            details="Too many requests. Slow down."
+            detail="Too many requests. Slow down.",
+            headers = {"Retry-After": str(retry_after)}
         )
     
     return remaining
