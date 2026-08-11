@@ -35,22 +35,22 @@ end
 --calcuate refill based onn elapsed time
 local elapsed = math.max(0, now-last_refill)
 local refill_amount = elapsed * refill_rate
-tokens = math.min(capacity, tokens + refil_amount)
+tokens = math.min(capacity, tokens + refill_amount)
 
 
 --decide: allow or deny
 local allowed = 0
 if tokens >= 1 then
-    tokens = toekns - 1
+    tokens = tokens - 1
     allowed = 1
 end
 
 
 --write updated state back
-redis..call("HMSET", key, "tokens", tokens, "last_refill", now)
+redis.call("HMSET", key, "tokens", tokens, "last_refill", now)
 
 
 --let the key epire if unused for a while so we dont leak memory forever
 redis.call("EXPIRE", key, 3600)
 
-return {alloed, tokens}
+return {allowed, tokens}
