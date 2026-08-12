@@ -1,5 +1,6 @@
 import time
 import redis
+import redis as redis_lib
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Response
 
@@ -9,6 +10,13 @@ app = FastAPI()
 
 #one shared redis connection for the whole app
 r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+r = redis.Redis(
+    host="localhost",
+    port=6379,
+    decode_responses = True,
+    socket_connect_timeout=2, # max seconds to wait when establishing connection
+    socket_timeout=2,           # max seconds to wait for a response once connected
+)
 
 with open("token_bucket.lua", "r", encoding="utf-8") as f:
     lua_script = f.read()
@@ -88,7 +96,19 @@ def rate_limiter_dependency(request: Request, response: Response):
     tier = get_client_tier(request)
     
     capacity, refill_rate = TIER_LIMITS[tier]
-    allowed, remaining = check_rate_limit(identifier, tier, capacity, refill_rate)
+    # allowed, remaining = check_rate_limit(identifier, tier, capacity, refill_rate)
+
+    try:
+        allowed, remaining = check_rate_limit(identifier, tier, capacity, refill_rate)
+    except redis_lib.exceptions.RedisError as e:
+        # Redis is unreachable or erroring — decide fail-open vs fail-closed here.
+        # FAIL OPEN (current choice): let the request through, but log it loudly,
+        # since silent failures here are how outages go unnoticed.
+        print(f"WARNING: rate limiter Redis error, failing open: {e}")
+        response.headers["X-RateLimit-Status"] = "degraded"
+        return None
+        # if switching from fail open to fail close use below->
+        # raise HTTPException(status_code=503, detail="Rate limiter unavailable.")
 
     #always tell the client how many tokens are left
     response.headers["X-RateLimit-Remaining"] = str(int(remaining))
