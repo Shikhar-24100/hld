@@ -1,6 +1,7 @@
 import time
 import redis
 import redis as redis_lib
+import os
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Response
 
@@ -20,9 +21,10 @@ def serve_demo():
 
 #one shared redis connection for the whole app
 r = redis.Redis(host="localhost", port=6379, decode_responses=True)
-r = redis.Redis(
-    host="localhost",
-    port=6379,
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+r = redis.from_url(
+    REDIS_URL,
     decode_responses = True,
     socket_connect_timeout=2, # max seconds to wait when establishing connection
     socket_timeout=2,           # max seconds to wait for a response once connected
