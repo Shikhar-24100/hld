@@ -8,6 +8,16 @@ from fastapi import FastAPI, HTTPException, Request, Depends, Response
 app = FastAPI()
 
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+def serve_demo():
+    return FileResponse("static/index.html")
+
+
 #one shared redis connection for the whole app
 r = redis.Redis(host="localhost", port=6379, decode_responses=True)
 r = redis.Redis(

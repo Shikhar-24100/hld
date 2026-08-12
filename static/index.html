@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Distributed Rate Limiter Demo</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 600px; margin: 60px auto; padding: 0 20px; }
+        h1 { font-size: 1.4rem; }
+        button { padding: 10px 20px; font-size: 1rem; cursor: pointer; margin-right: 10px; }
+        #log { margin-top: 20px; }
+        .entry { padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; font-family: monospace; font-size: 0.9rem; }
+        .allowed { background: #d4edda; color: #155724; }
+        .denied { background: #f8d7da; color: #721c24; }
+        #bucket-visual { display: flex; gap: 4px; margin: 20px 0; }
+        .token { width: 20px; height: 20px; border-radius: 50%; background: #28a745; transition: background 0.3s; }
+        .token.empty { background: #ddd; }
+    </style>
+</head>
+<body>
+    <h1>Distributed Rate Limiter (Redis + Lua + FastAPI)</h1>
+    <p>Free tier: 5 tokens, refills 1/sec. Click rapidly to drain the bucket.</p>
+
+    <div id="bucket-visual"></div>
+
+    <button onclick="fireRequest()">Send Request</button>
+    <button onclick="fireBurst()">Fire 10 at once</button>
+
+    <div id="log"></div>
+
+    <script>
+        const CAPACITY = 5;
+
+        function renderBucket(remaining) {
+            const container = document.getElementById('bucket-visual');
+            container.innerHTML = '';
+            for (let i = 0; i < CAPACITY; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'token' + (i < remaining ? '' : ' empty');
+                container.appendChild(dot);
+            }
+        }
+
+        async function fireRequest() {
+            const res = await fetch('/ping');
+            const remaining = res.headers.get('X-RateLimit-Remaining');
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'entry ' + (res.status === 200 ? 'allowed' : 'denied');
+            entry.textContent = `[${new Date().toLocaleTimeString()}] Status ${res.status} — tokens remaining: ${remaining ?? 'n/a'}`;
+            log.prepend(entry);
+            if (remaining !== null) renderBucket(parseInt(remaining));
+        }
+
+        async function fireBurst() {
+            for (let i = 0; i < 10; i++) {
+                fireRequest();
+            }
+        }
+
+        renderBucket(CAPACITY);
+    </script>
+</body>
+</html>
