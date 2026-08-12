@@ -17,17 +17,38 @@ token_bucket_script = r.register_script(lua_script)
 
 
 #config - hardcoded for now, (will make it flexible later on)
-CAPACITY = 5
-REFILL_RATE = 1
+# CAPACITY = 5
+# REFILL_RATE = 1
+
+# flexed->
+TIER_LIMITS = {
+    "free": (5,1),
+    "pro": (50, 10),
+    "enterprise": (500, 100)
+}
+
+DEFAULT_TIER = "free"
+
+def get_client_tier(request: Request) -> str:
+    #in a real system this wuld look up an api-key in the db, for now
+    #we fake it with a header so we can test different tiers
+
+    tier = request.headers.get("X-Tier", DEFAULT_TIER)
+    if tier not in TIER_LIMITS:
+        tier = DEFAULT_TIER
+    return tier
 
 
-def check_rate_limit(identifier: str):
+# the identifier should probably include the tier, or you get a subtle 
+# bug — if the same client somehow sends different X-Tier headers across 
+# requests, they'd be sharing one bucket but with inconsistent limits applied to it.
+def check_rate_limit(identifier: str, tier: str, capacity: int, refill_rate: float):
     key = f"bucket:{identifier}"
     now = time.time()
 
     result = token_bucket_script(
         keys=[key],
-        args=[CAPACITY,REFILL_RATE,now]
+        args=[capacity, refill_rate,now]
     )
 
     allowed, tokens_remaining = result
@@ -64,16 +85,18 @@ def rate_limiter_dependency(request: Request, response: Response):
 
     #rectified->
     identifier = get_client_identifier(request)
-    allowed, remaining = check_rate_limit(identifier)
-
+    tier = get_client_tier(request)
+    
+    capacity, refill_rate = TIER_LIMITS[tier]
+    allowed, remaining = check_rate_limit(identifier, tier, capacity, refill_rate)
 
     #always tell the client how many tokens are left
     response.headers["X-RateLimit-Remaining"] = str(int(remaining))
-    response.headers["X-RateLimit-Limit"] = str(CAPACITY)
-
+    response.headers["X-RateLimit-Limit"] = str(capacity)
+    response.headers["X-RateLimit-Tier"] = tier
 
     if not allowed:
-        retry_after = round(1/REFILL_RATE, 2);
+        retry_after = round(1/refill_rate, 2);
         raise HTTPException(
             status_code = 429,
             detail="Too many requests. Slow down.",
@@ -81,7 +104,10 @@ def rate_limiter_dependency(request: Request, response: Response):
         )
     return remaining
 
-
 @app.get("/ping")
 def ping(remaining: float = Depends(rate_limiter_dependency)):
     return {"message": "pong", "tokens_remaining": remaining}
+
+
+
+
