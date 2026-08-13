@@ -4,7 +4,7 @@ A token bucket rate limiter that works correctly across multiple app
 instances, using Redis for shared state and a Lua script for atomic
 check-and-decrement operations.
  
-**Live demo:** [add your Render URL here once deployed]
+**Live demo:** [https://nanosentry.onrender.com/]
  
 ## Why this stack
  
